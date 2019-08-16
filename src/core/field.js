@@ -1,6 +1,6 @@
 import Resolver from './resolver';
 import RuleContainer from './ruleContainer';
-import { isEvent, addEventListener, normalizeEvents } from '../utils/events';
+import { isEvent, addEventListener, normalizeEvents, detectPassiveSupport } from '../utils/events';
 import {
   uniqId,
   createFlags,
@@ -51,31 +51,57 @@ const DEFAULT_OPTIONS = {
 
 export default class Field {
   id: string;
+
   el: ?HTMLInputElement;
+
   updated: boolean;
+
   dependencies: Array<{ name: string, field: Field }>;
+
   watchers: Watcher[];
+
   events: string[];
+
   rules: { [string]: Object };
+
   validity: boolean;
+
   aria: boolean;
+
   vm: Object | null;
+
   component: Object | null;
+
   ctorConfig: ?Object;
+
   flags: { [string]: boolean };
+
   alias: ?string;
+
   getter: () => any;
+
   name: string;
+
   scope: string | null;
+
   targetOf: ?string;
+
   immediate: boolean;
+
   classes: boolean;
+
   classNames: { [string]: string };
+
   delay: number | Object;
+
   listen: boolean;
+
   model: null | { expression: string | null, lazy: boolean };
+
   value: any;
+
   _alias: ?string;
+
   _delay: number | Object;
 
   constructor (options: FieldOptions | MapObject = {}) {
@@ -189,7 +215,7 @@ export default class Field {
       return this.id === options.id;
     }
 
-    let matchesComponentId = isNullOrUndefined(options.vmId) ? () => true : (id) => id === this.vmId;
+    const matchesComponentId = isNullOrUndefined(options.vmId) ? () => true : (id) => id === this.vmId;
     if (!matchesComponentId(options.vmId)) {
       return false;
     }
@@ -267,7 +293,7 @@ export default class Field {
     }
 
     if (Object.keys(options.rules || {}).length === 0 && this.updated) {
-      let resetFlag = this.flags.validated;
+      const resetFlag = this.flags.validated;
       this.validator.validate(`#${this.id}`).then(() => {
         this.flags.validated = resetFlag;
       });
@@ -471,6 +497,13 @@ export default class Field {
       // only needed once.
       this.unwatch(/^class_blur$/);
     };
+    const blurClearErrorsOnFocus = () => {
+      if (blurEvent === 'blur' && this && this.events && this.events.length === 1 && this.events[0] === 'blur') {
+        this.validator.errors.clear();
+        toggleClass(this.el, this.classNames.valid, false);
+        toggleClass(this.el, this.classNames.invalid, false);
+      }
+    };
 
     const inputEvent = isTextInput(this.el) ? 'input' : 'change';
     const onInput = () => {
@@ -509,6 +542,7 @@ export default class Field {
     // Checkboxes and radio buttons on Mac don't emit blur naturally, so we listen on click instead.
     const blurEvent = isCheckboxOrRadioInput(this.el) ? 'change' : 'blur';
     addEventListener(this.el, blurEvent, onBlur);
+    this.el.addEventListener('focus', blurClearErrorsOnFocus, detectPassiveSupport() ? { passive: true } : false);
     this.watchers.push({
       tag: 'class_input',
       unwatch: () => {
